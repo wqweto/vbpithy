@@ -6,7 +6,7 @@ set bin_dir=..\bin
 
 pushd %~dp0
 
-%cl_exe% /MDd /LD /Tppithy\pithy.c -I. -DPITHY_UNALIGNED_LOADS_AND_STORES -DPITHY_STDCALL=__stdcall -DNDEBUG /Fedebug_pithy.dll /link /def:debug_pithy.def
+%cl_exe% -O2 -Ox -MDd -LD /Tppithy\pithy.c -I. -DPITHY_UNALIGNED_LOADS_AND_STORES -DPITHY_STDCALL=__stdcall -DNDEBUG -Fedebug_pithy.dll /link /def:debug_pithy.def
 ::%cl_exe% /MDd /LD /Tppithy\pithy.c -I. -DPITHY_UNALIGNED_LOADS_AND_STORES -DPITHY_STDCALL=__stdcall /Fedebug_pithy.dll /Zi /link /def:debug_pithy.def /DEBUG /INCREMENTAL:NO
 if errorlevel 1 goto :eof
 
