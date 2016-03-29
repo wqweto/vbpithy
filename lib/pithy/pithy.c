@@ -37,7 +37,6 @@
 */
 
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -67,22 +66,38 @@ enum {
 };
 
 
-#if       defined (__GNUC__) && (__GNUC__ >= 3)
+#if     defined (__GNUC__) && (__GNUC__ >= 3)
 #define PITHY_ATTRIBUTES(attr, ...)        __attribute__((attr, ##__VA_ARGS__))
 #define PITHY_EXPECTED(cond, expect)       __builtin_expect((long)(cond), (expect))
 #define PITHY_EXPECT_T(cond)               PITHY_EXPECTED(cond, 1u)
 #define PITHY_EXPECT_F(cond)               PITHY_EXPECTED(cond, 0u)
 #define PITHY_PREFETCH(ptr)                __builtin_prefetch(ptr)
-#else  // defined (__GNUC__) && (__GNUC__ >= 3) 
+#else
+#ifndef _MSC_VER
 #define PITHY_ATTRIBUTES(attr, ...)
+#endif
 #define PITHY_EXPECTED(cond, expect)       (cond)
 #define PITHY_EXPECT_T(cond)               (cond)
 #define PITHY_EXPECT_F(cond)               (cond)
 #define PITHY_PREFETCH(ptr)
-#endif // defined (__GNUC__) && (__GNUC__ >= 3) 
+#endif
 
+#ifdef _MSC_VER
+#if _MSC_VER <= 1200
+#define __FUNCTION__ "#unknown#"
+#define UINT32_MAX  (0xffffffff)
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+typedef unsigned __int64 uint64_t;
+#endif // _MSC_VER <= 1200
+#include <malloc.h>
+typedef int ssize_t;
+#define PITHY_STATIC_INLINE    static __forceinline
+#define PITHY_ALIGNED(x)       __declspec(align(x))
+#else
 #define PITHY_STATIC_INLINE    static __inline__ PITHY_ATTRIBUTES(always_inline)
 #define PITHY_ALIGNED(x)                         PITHY_ATTRIBUTES(aligned(x))
+#endif
 
 #if defined(NS_BLOCK_ASSERTIONS) && !defined(NDEBUG)
 #define NDEBUG
@@ -91,7 +106,7 @@ enum {
 #ifdef NDEBUG
 #define DCHECK(condition) 
 #else
-#define DCHECK(condition) do { if(PITHY_EXPECT_F(!(condition))) { fprintf(stderr, "%s / %s @ %ld: Invalid parameter not satisfying: %s", __FILE__, __PRETTY_FUNCTION__, (long)__LINE__, #condition); fflush(stderr); abort(); } } while(0)
+#define DCHECK(condition) do { if(PITHY_EXPECT_F(!(condition))) { fprintf(stderr, "%s / %s @ %ld: Invalid parameter not satisfying: %s", __FILE__, __FUNCTION__, (long)__LINE__, #condition); fflush(stderr); abort(); } } while(0)
 #endif
 
 
@@ -220,7 +235,7 @@ PITHY_STATIC_INLINE int pithy_Log2Floor(uint32_t n) {
 }
 
 PITHY_STATIC_INLINE int pithy_FindLSBSetNonZero32(uint32_t n) {
-  int i = 0, rc = 31;
+  int i = 0, rc = 31, shift;
   for(i = 4, shift = 1 << 4; i >= 0; --i) { const uint32_t x = n << shift; if(x != 0u) { n = x; rc -= shift; } shift >>= 1; }
   return(rc);
 }
@@ -339,18 +354,23 @@ PITHY_STATIC_INLINE char *pithy_EmitCopy(char *op, size_t offset, size_t len) {
 
 
 
-size_t pithy_MaxCompressedLength(size_t inputLength) {
+PITHY_API size_t PITHY_STDCALL pithy_MaxCompressedLength(size_t inputLength) {
   return((inputLength >= PITHY_UNCOMPRESSED_MAX_LENGTH) ? 0ul : 32ul + inputLength + (inputLength / 6ul));
 }
 
-size_t pithy_Compress(const char *uncompressed, size_t uncompressedLength, char *compressedOut, size_t compressedOutLength, int compressionLevel) {
+PITHY_API size_t PITHY_STDCALL pithy_Compress(const char *uncompressed, size_t uncompressedLength, char *compressedOut, size_t compressedOutLength, int compressionLevel) {
   if((pithy_MaxCompressedLength(uncompressedLength) > compressedOutLength) || (uncompressedLength >= PITHY_UNCOMPRESSED_MAX_LENGTH) || (uncompressedLength == 0ul)) { return(0ul); }
   char *compressedPtr = compressedOut;
   
   size_t hashTableSize = 0x100ul, maxHashTableSize = 1 << (12ul + (((compressionLevel < 0) ? 0 : (compressionLevel > 9) ? 9 : compressionLevel) / 2ul));
   while((hashTableSize < maxHashTableSize) && (hashTableSize < uncompressedLength)) { hashTableSize <<= 1; }
-  pithy_hashOffset_t stackHashTable[hashTableSize], *heapHashTable = NULL, *hashTable = stackHashTable;
-  if((sizeof(pithy_hashOffset_t) * hashTableSize) >= (1024ul * 128ul)) { if((heapHashTable = malloc(sizeof(pithy_hashOffset_t) * hashTableSize)) == NULL) { return(0ul); } hashTable = heapHashTable; }
+#ifdef _MSC_VER
+  pithy_hashOffset_t *stackHashTable = ((sizeof(pithy_hashOffset_t) * hashTableSize) < (1024ul * 128ul)) ? (pithy_hashOffset_t *)_alloca(hashTableSize) : NULL;
+#else
+  pithy_hashOffset_t stackHashTable[hashTableSize];
+#endif
+  pithy_hashOffset_t *heapHashTable = NULL, *hashTable = stackHashTable;
+  if((sizeof(pithy_hashOffset_t) * hashTableSize) >= (1024ul * 128ul)) { if((heapHashTable = (pithy_hashOffset_t *)malloc(sizeof(pithy_hashOffset_t) * hashTableSize)) == NULL) { return(0ul); } hashTable = heapHashTable; }
   size_t x = 0ul;
   for(x = 0ul; x < hashTableSize; x++) { hashTable[x] = uncompressed; }
   
@@ -447,7 +467,7 @@ size_t pithy_Compress(const char *uncompressed, size_t uncompressedLength, char 
   pithy_Store32(compressedPtr, 0); compressedPtr += 4;
   
   DCHECK((size_t)(compressedPtr - compressedOut) <= compressedOutLength);
-  if(heapHashTable != NULL) { free(heapHashTable); heapHashTable = NULL; hashTable = NULL; }
+  if(heapHashTable != NULL) { free((void *)heapHashTable); heapHashTable = NULL; hashTable = NULL; }
   return(compressedPtr - compressedOut);
 }
 
@@ -497,14 +517,14 @@ static const uint16_t pithy_charTable[256] = {
 };
 
 
-int pithy_GetDecompressedLength(const char *compressed, size_t compressedLength, size_t *decompressedOutLengthResult) {
+PITHY_API int PITHY_STDCALL pithy_GetDecompressedLength(const char *compressed, size_t compressedLength, size_t *decompressedOutLengthResult) {
   const char *compressedEnd      = compressed + compressedLength;
   size_t      decompressedLength = 0ul;
   if(pithy_Parse32WithLimit(compressed, compressedEnd, &decompressedLength) != NULL) { *decompressedOutLengthResult = decompressedLength; return(1); } else { return(0); }
 }
 
 
-int pithy_Decompress(const char *compressed, size_t compressedLength, char *decompressedOut, size_t decompressedOutLength) {
+PITHY_API int PITHY_STDCALL pithy_Decompress(const char *compressed, size_t compressedLength, char *decompressedOut, size_t decompressedOutLength) {
   const char *nextCompressedPtr = NULL, *compressedEnd = (compressed + compressedLength);
   size_t parsedDecompressedLength = 0ul;
   if(((nextCompressedPtr = pithy_Parse32WithLimit(compressed, compressedEnd, &parsedDecompressedLength)) == NULL) || (parsedDecompressedLength > decompressedOutLength)) { return(0); }

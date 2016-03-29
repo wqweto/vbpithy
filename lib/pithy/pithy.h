@@ -36,7 +36,10 @@
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#if _MSC_VER <= 1200
+#else
 #include <stdint.h>
+#endif
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -46,12 +49,20 @@ extern "C" {
 #ifndef _PITHY_H_
 #define _PITHY_H_
 
-  // compressionLevel >= 0 && compressionLevel <= 9.  Values out side this range will be clamped to this range.
-size_t pithy_Compress  (const char *uncompressed, size_t uncompressedLength, char *compressedOut,   size_t compressedOutLength, int compressionLevel);
-int    pithy_Decompress(const char *compressed,   size_t compressedLength,   char *decompressedOut, size_t decompressedOutLength);
+// Provide the ability to override linkage features of the interface.
+#ifndef PITHY_API
+# define PITHY_API
+#endif
+#ifndef PITHY_STDCALL
+# define PITHY_STDCALL
+#endif
 
-size_t pithy_MaxCompressedLength(size_t inputLength);
-int    pithy_GetDecompressedLength(const char *compressed, size_t compressedLength, size_t *decompressedOutLengthResult);
+  // compressionLevel >= 0 && compressionLevel <= 9.  Values out side this range will be clamped to this range.
+PITHY_API size_t PITHY_STDCALL pithy_Compress  (const char *uncompressed, size_t uncompressedLength, char *compressedOut,   size_t compressedOutLength, int compressionLevel);
+PITHY_API int    PITHY_STDCALL pithy_Decompress(const char *compressed,   size_t compressedLength,   char *decompressedOut, size_t decompressedOutLength);
+
+PITHY_API size_t PITHY_STDCALL pithy_MaxCompressedLength(size_t inputLength);
+PITHY_API int    PITHY_STDCALL pithy_GetDecompressedLength(const char *compressed, size_t compressedLength, size_t *decompressedOutLengthResult);
 
 #endif // _PITHY_H_
 
