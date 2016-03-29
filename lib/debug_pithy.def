@@ -1,0 +1,5 @@
+EXPORTS
+    pithy_Compress=_pithy_Compress@20
+    pithy_Decompress=_pithy_Decompress@16
+    pithy_GetDecompressedLength=_pithy_GetDecompressedLength@12
+    pithy_MaxCompressedLength=_pithy_MaxCompressedLength@4
